@@ -76,6 +76,7 @@ class RecipientController extends Controller
 
     /**
      * Generate JPG image from certificate template
+     * New logic: Always create PDF first, then convert to JPG with high DPI
      */
     public function generateJpg(Request $request)
     {
@@ -103,59 +104,55 @@ class RecipientController extends Controller
             $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['recipient_name']);
             $filename = 'Certificate_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
 
-            // Generate JPG using Spatie PDF with JPG format
-            try {
-                // Try to generate JPG directly using Spatie PDF
-                $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
-                    ->paperSize(177.7, 126.0)
-                    ->margins(0, 0, 0, 0)
-                    ->format('jpg'); // Try JPG format directly
+            // Step 1: Always create PDF first using the same logic as generatePdf
+            $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
+                ->paperSize(177.7, 126.0)
+                ->margins(0, 0, 0, 0);
 
-                // Return JPG as response
-                return response($pdf->get(), 200)
-                    ->header('Content-Type', 'image/jpeg')
-                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            // Save PDF temporarily
+            $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+            $pdf->save($tempPdfPath);
 
-            } catch (\Exception $e) {
-                // Fallback: Use PDF to JPG conversion with Imagick
+            // Step 2: Convert PDF to JPG with high DPI quality
+            if (extension_loaded('imagick')) {
                 try {
-                    $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
-                        ->paperSize(177.7, 126.0)
-                        ->margins(0, 0, 0, 0);
+                    $imagick = new \Imagick();
+                    // Set very high resolution for excellent quality (600 DPI)
+                    $imagick->setResolution(600, 600);
+                    $imagick->readImage($tempPdfPath);
+                    $imagick->setImageFormat('jpeg');
+                    // Maximum quality compression
+                    $imagick->setImageCompressionQuality(100);
+                    // Additional quality optimizations
+                    $imagick->setImageCompression(\Imagick::COMPRESSION_JPEG);
+                    $imagick->setImageDepth(8);
+                    // Flatten layers to ensure single image output
+                    $imagick = $imagick->flattenImages();
 
-                    // Save PDF temporarily
-                    $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
-                    $pdf->save($tempPdfPath);
+                    // Clean up temp PDF
+                    unlink($tempPdfPath);
 
-                    // Convert PDF to JPG using Imagick
-                    if (extension_loaded('imagick')) {
-                        $imagick = new \Imagick();
-                        $imagick->setResolution(300, 300); // High resolution for better quality
-                        $imagick->readImage($tempPdfPath);
-                        $imagick->setImageFormat('jpeg');
-                        $imagick->setImageCompressionQuality(95);
-                        $imagick->mergeImageLayers(\Imagick::LAYER_MERGE_FLATTEN);
+                    // Return JPG as response
+                    return response($imagick->getImageBlob(), 200)
+                        ->header('Content-Type', 'image/jpeg')
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
 
-                        // Clean up temp PDF
+                } catch (\Exception $e) {
+                    // Clean up temp PDF on error
+                    if (file_exists($tempPdfPath)) {
                         unlink($tempPdfPath);
-
-                        // Return JPG as response
-                        return response($imagick->getImageBlob(), 200)
-                            ->header('Content-Type', 'image/jpeg')
-                            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
-                    } else {
-                        // If no Imagick, return PDF instead
-                        return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
                     }
-
-                } catch (\Exception $e2) {
-                    \Log::error('Unexpected error during JPG generation fallback', [
-                        'message' => $e2->getMessage(),
-                        'trace' => $e2->getTraceAsString(),
+                    \Log::error('Error converting PDF to JPG with Imagick', [
+                        'message' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
                     ]);
-                    return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e2->getMessage()]);
+                    return back()->withErrors(['error' => 'Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage()]);
                 }
+            } else {
+                // If no Imagick, return PDF instead
+                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
             }
+
         } catch (\Exception $e) {
             \Log::error('JPG generation failed at validation or pre-process', [
                 'message' => $e->getMessage(),
@@ -498,7 +495,7 @@ class RecipientController extends Controller
     }
 
     /**
-     * Generate a single JPG using Spatie PDF with fallback to Imagick.
+     * Generate a single JPG using the new logic: Always create PDF first, then convert to JPG with high DPI.
      *
      * @param array $data
      * @param string $filePathJpg
@@ -507,45 +504,61 @@ class RecipientController extends Controller
      */
     private function generateSingleJpg(array $data, string $filePathJpg): void
     {
-        try {
-            // Try to generate JPG directly using Spatie PDF
-            $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
-                ->paperSize(177.7, 126.0)
-                ->margins(0, 0, 0, 0)
-                ->format('jpg'); // Try JPG format directly
+        // Step 1: Always create PDF first using the same logic as generatePdf
+        $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
+            ->paperSize(177.7, 126.0)
+            ->margins(0, 0, 0, 0);
 
-            // Save JPG file
-            $pdf->save($filePathJpg);
-            
-        } catch (\Exception $e) {
-            // Fallback: Use PDF to JPG conversion with Imagick
-            $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
-                ->paperSize(177.7, 126.0)
-                ->margins(0, 0, 0, 0);
+        // Save PDF temporarily
+        $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+        $pdf->save($tempPdfPath);
 
-            // Save PDF temporarily
-            $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
-            $pdf->save($tempPdfPath);
+        // Step 2: Convert PDF to JPG with high DPI quality using helper method
+        $this->convertPdfToJpg($tempPdfPath, $filePathJpg);
+    }
 
-            // Convert PDF to JPG using Imagick
-            if (extension_loaded('imagick')) {
+    /**
+     * Convert PDF to JPG with optimized high-quality settings
+     *
+     * @param string $pdfPath
+     * @param string $jpgPath
+     * @return void
+     * @throws \Exception
+     */
+    private function convertPdfToJpg(string $pdfPath, string $jpgPath): void
+    {
+        if (extension_loaded('imagick')) {
+            try {
                 $imagick = new \Imagick();
-                $imagick->setResolution(300, 300); // High resolution for better quality
-                $imagick->readImage($tempPdfPath);
+                // Set very high resolution for excellent quality (600 DPI)
+                $imagick->setResolution(600, 600);
+                $imagick->readImage($pdfPath);
                 $imagick->setImageFormat('jpeg');
-                $imagick->setImageCompressionQuality(95);
-                $imagick->mergeImageLayers(\Imagick::LAYER_MERGE_FLATTEN);
+                // Maximum quality compression
+                $imagick->setImageCompressionQuality(100);
+                // Additional quality optimizations
+                $imagick->setImageCompression(\Imagick::COMPRESSION_JPEG);
+                $imagick->setImageDepth(8);
+                // Flatten layers to ensure single image output
+                $imagick = $imagick->flattenImages();
 
                 // Save JPG file
-                $imagick->writeImage($filePathJpg);
+                $imagick->writeImage($jpgPath);
 
                 // Clean up temp PDF
-                unlink($tempPdfPath);
-            } else {
-                // If no Imagick, copy PDF file with JPG extension (fallback)
-                copy($tempPdfPath, $filePathJpg);
-                unlink($tempPdfPath);
+                unlink($pdfPath);
+                
+            } catch (\Exception $e) {
+                // Clean up temp PDF on error
+                if (file_exists($pdfPath)) {
+                    unlink($pdfPath);
+                }
+                throw new \Exception('Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage());
             }
+        } else {
+            // If no Imagick, copy PDF file with JPG extension (fallback)
+            copy($pdfPath, $jpgPath);
+            unlink($pdfPath);
         }
     }
 
