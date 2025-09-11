@@ -6,7 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Spatie\LaravelPdf\Facades\Pdf;
-use setasign\Fpdi\Tcpdf\Fpdi;
+use setasign\Fpdi\Fpdi;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use ZipArchive;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -628,15 +628,22 @@ class RecipientController extends Controller
             ->save($filePathPdf);
 
         // Enforce single page using FPDI
-        $pdf = new Fpdi();
-        $pageCount = $pdf->setSourceFile($filePathPdf);
+        try {
+            $pdf = new Fpdi();
+            $pageCount = $pdf->setSourceFile($filePathPdf);
 
-        if ($pageCount > 1) {
-            // Create a new PDF with only the first page
-            $pdf->AddPage();
-            $templateId = $pdf->importPage(1);
-            $pdf->useTemplate($templateId);
-            $pdf->Output($filePathPdf, 'F');
+            if ($pageCount > 1) {
+                // Create a new PDF with only the first page
+                $pdf->AddPage();
+                $templateId = $pdf->importPage(1);
+                $pdf->useTemplate($templateId);
+                $pdf->Output($filePathPdf, 'F');
+            }
+        } catch (\Exception $e) {
+            // If FPDI fails, keep the original PDF
+            \Log::warning('FPDI single page enforcement failed, keeping original PDF', [
+                'message' => $e->getMessage()
+            ]);
         }
     }
 
@@ -1034,6 +1041,13 @@ class RecipientController extends Controller
             'background_image' => $data['background_image']
         ];
 
+        // Check if background image file exists
+        $backgroundPath = public_path('assets/newDoctorTemplate/' . $processedData['background_image']);
+        if (!file_exists($backgroundPath)) {
+            \Log::error('Background image not found for preview', ['path' => $backgroundPath]);
+            return back()->withErrors(['error' => 'Ảnh nền không tồn tại: ' . $processedData['background_image']]);
+        }
+
         return view('certificate.new-student-template', compact('processedData'));
     }
 
@@ -1054,12 +1068,19 @@ class RecipientController extends Controller
                 'background_image' => $data['background_image']
             ];
 
+            // Check if background image file exists
+            $backgroundPath = public_path('assets/newDoctorTemplate/' . $processedData['background_image']);
+            if (!file_exists($backgroundPath)) {
+                \Log::error('Background image not found', ['path' => $backgroundPath]);
+                return back()->withErrors(['error' => 'Ảnh nền không tồn tại: ' . $processedData['background_image']]);
+            }
+
             // Generate a safe filename
             $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['student_name']);
             $filename = 'NewStudent_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.pdf';
 
             // Generate PDF
-            $pdf = Pdf::view('certificate.new-student-template', ['data' => $processedData])
+            $pdf = Pdf::view('certificate.new-student-template', ['processedData' => $processedData])
                 ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
                 ->margins(0, 0, 0, 0);
 
@@ -1068,6 +1089,7 @@ class RecipientController extends Controller
             \Log::error('New Student PDF generation failed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
             return back()->withErrors(['error' => 'Lỗi tạo PDF: ' . $e->getMessage()]);
         }
@@ -1090,12 +1112,19 @@ class RecipientController extends Controller
                 'background_image' => $data['background_image']
             ];
 
+            // Check if background image file exists
+            $backgroundPath = public_path('assets/newDoctorTemplate/' . $processedData['background_image']);
+            if (!file_exists($backgroundPath)) {
+                \Log::error('Background image not found', ['path' => $backgroundPath]);
+                return back()->withErrors(['error' => 'Ảnh nền không tồn tại: ' . $processedData['background_image']]);
+            }
+
             // Generate a safe filename
             $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['student_name']);
             $filename = 'NewStudent_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
 
             // Step 1: Create PDF first
-            $pdf = Pdf::view('certificate.new-student-template', ['data' => $processedData])
+            $pdf = Pdf::view('certificate.new-student-template', ['processedData' => $processedData])
                 ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
                 ->margins(0, 0, 0, 0);
 
@@ -1115,7 +1144,7 @@ class RecipientController extends Controller
                     $imagick->setImageDepth(8);
                     $imagick = $imagick->flattenImages();
 
-                    // Resize image to width = 1920px
+                    // Resize image to width = 1192px
                     $currentWidth = $imagick->getImageWidth();
                     $currentHeight = $imagick->getImageHeight();
                     $targetWidth = 1192;
@@ -1153,6 +1182,7 @@ class RecipientController extends Controller
             \Log::error('New Student JPG generation failed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
             return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e->getMessage()]);
         }

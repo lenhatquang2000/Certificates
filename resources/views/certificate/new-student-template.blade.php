@@ -93,7 +93,7 @@
         .certificate-preview-bg {
             width: 1192px !important;
             height: 1482px !important;
-            background: url('data:image/jpeg;base64,{{ base64_encode(file_get_contents(public_path('assets/newDoctorTemplate/' . $data['background_image']))) }}') no-repeat;
+            background: url('data:image/jpeg;base64,{{ base64_encode(file_get_contents(public_path('assets/newDoctorTemplate/' . $processedData['background_image']))) }}') no-repeat;
             background-size: 100% 100%; /* Lấp đầy container mà không cắt xén */
             margin: 0 !important;
             padding: 0 !important;
