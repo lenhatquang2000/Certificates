@@ -147,6 +147,9 @@
             <button type="submit" class="btn btn-primary btn-lg">
                 <i class="fas fa-file-pdf"></i> Generate PDF / Tạo giấy khen PDF
             </button>
+            <button type="button" class="btn btn-success btn-lg" onclick="generateJPG()">
+                <i class="fas fa-image"></i> Generate JPG / Tạo giấy khen JPG
+            </button>
             <button type="button" class="btn btn-secondary btn-lg" onclick="previewPDF()">
                 <i class="fas fa-eye"></i> Preview and Adjust / Xem trước và điều chỉnh
             </button>
@@ -253,6 +256,12 @@
     function previewPDF() {
         const form = document.getElementById('certificateForm');
         form.action = "{{ route('certificate.preview.pdf') }}";
+        form.submit();
+    }
+
+    function generateJPG() {
+        const form = document.getElementById('certificateForm');
+        form.action = "{{ route('certificate.generate.jpg') }}";
         form.submit();
     }
 </script>

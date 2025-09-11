@@ -6,10 +6,12 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Spatie\LaravelPdf\Facades\Pdf;
-use setasign\Fpdi\Fpdi;
+use setasign\Fpdi\Tcpdf\Fpdi;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use ZipArchive;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Imagick;
+use Barryvdh\Snappy\Facades\SnappyImage;
 class RecipientController extends Controller
 {
     /**
@@ -28,7 +30,6 @@ class RecipientController extends Controller
         $data = [
             'recipient_name' => 'NGUYỄN VĂN A',
             'award_title' => 'Sinh viên Xuất sắc năm học',
-            'academic_year' => '2024 – 2025',
             'award_title_english' => 'Excellent Student of The Class, Gcademic Year 2024 – 2025',
             'program' => 'TÀI CHÍNH - NGÂN HÀNG KHÓA 17/2024',
             'program_english' => 'Finance - Banking K17/2024',
@@ -74,13 +75,104 @@ class RecipientController extends Controller
     }
 
     /**
+     * Generate JPG image from certificate template
+     */
+    public function generateJpg(Request $request)
+    {
+        try {
+            // Validate input data
+            $data = $request->validate([
+                'recipient_name' => 'required|string|max:255',
+                'award_title' => 'required|string|max:255',
+                'award_title_english' => 'required|string|max:500',
+                'program' => 'required|string|max:255',
+                'program_english' => 'nullable|string|max:255',
+                'issue_day' => 'required|integer|min:1|max:31',
+                'issue_month' => 'required|integer|min:1|max:12',
+                'issue_year' => 'required|integer|min:2020|max:2030',
+                'location' => 'required|string|max:100',
+                'decision_prefix' => 'nullable|string|max:50',
+                'rector_name' => 'required|string|max:100',
+                'position_adjustments' => 'nullable|array',
+            ]);
+
+            // Process data only once
+            $processedData = $this->processData($data);
+
+            // Generate a safe filename
+            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['recipient_name']);
+            $filename = 'Certificate_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
+
+            // Generate JPG using Spatie PDF with JPG format
+            try {
+                // Try to generate JPG directly using Spatie PDF
+                $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
+                    ->paperSize(177.7, 126.0)
+                    ->margins(0, 0, 0, 0)
+                    ->format('jpg'); // Try JPG format directly
+
+                // Return JPG as response
+                return response($pdf->get(), 200)
+                    ->header('Content-Type', 'image/jpeg')
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+            } catch (\Exception $e) {
+                // Fallback: Use PDF to JPG conversion with Imagick
+                try {
+                    $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
+                        ->paperSize(177.7, 126.0)
+                        ->margins(0, 0, 0, 0);
+
+                    // Save PDF temporarily
+                    $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+                    $pdf->save($tempPdfPath);
+
+                    // Convert PDF to JPG using Imagick
+                    if (extension_loaded('imagick')) {
+                        $imagick = new \Imagick();
+                        $imagick->setResolution(300, 300); // High resolution for better quality
+                        $imagick->readImage($tempPdfPath);
+                        $imagick->setImageFormat('jpeg');
+                        $imagick->setImageCompressionQuality(95);
+                        $imagick->mergeImageLayers(\Imagick::LAYER_MERGE_FLATTEN);
+
+                        // Clean up temp PDF
+                        unlink($tempPdfPath);
+
+                        // Return JPG as response
+                        return response($imagick->getImageBlob(), 200)
+                            ->header('Content-Type', 'image/jpeg')
+                            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                    } else {
+                        // If no Imagick, return PDF instead
+                        return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
+                    }
+
+                } catch (\Exception $e2) {
+                    \Log::error('Unexpected error during JPG generation fallback', [
+                        'message' => $e2->getMessage(),
+                        'trace' => $e2->getTraceAsString(),
+                    ]);
+                    return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e2->getMessage()]);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('JPG generation failed at validation or pre-process', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Generate PDF with viewport exactly matching the certificate frame,
      * no extra white space, using custom page size (1813x1300px at 96dpi).
      */
-     /**
-      * Generate PDF, dùng để loại bỏ trang thứ 2 trở lên trong file PDF.
-      * Chỉ giữ lại trang đầu tiên của file PDF xuất ra.
-      */
+    /**
+     * Generate PDF, dùng để loại bỏ trang thứ 2 trở lên trong file PDF.
+     * Chỉ giữ lại trang đầu tiên của file PDF xuất ra.
+     */
     public function generatePdf(Request $request)
     {
         try {
@@ -88,7 +180,6 @@ class RecipientController extends Controller
             $data = $request->validate([
                 'recipient_name' => 'required|string|max:255',
                 'award_title' => 'required|string|max:255',
-                'academic_year' => 'required|string|max:50',
                 'award_title_english' => 'required|string|max:500',
                 'program' => 'required|string|max:255',
                 'program_english' => 'nullable|string|max:255',
@@ -141,10 +232,51 @@ class RecipientController extends Controller
     }
     
     /**
+     * Generate bulk JPGs from an Excel file and return as a ZIP.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    public function generateBulkJpg(Request $request)
+    {
+        // Validate the uploaded Excel file
+        $request->validate([
+            'excel_file' => 'required|file|mimes:xlsx,xls'
+        ]);
+
+        $filePath = $request->file('excel_file')->getRealPath();
+        $tempDir = $this->createTempDirectory();
+
+        try {
+            // Load and parse Excel data
+            $data = $this->loadExcelData($filePath);
+            $header = $data['header'];
+            $rows = $data['rows'];
+            $mssvCol = $this->findMssvColumn($header);
+
+            // Generate JPGs
+            $jpgFiles = $this->generateJpgs($rows, $header, $mssvCol, $tempDir);
+
+            // Create ZIP file
+            $zipFilePath = $this->createZipFile($jpgFiles);
+
+            // Clean up temporary files
+            $this->cleanupTempFiles($jpgFiles, $tempDir);
+
+            // Return ZIP file for download
+            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            $this->cleanupTempFiles([], $tempDir);
+            Log::error('Error in generateBulkJpg', ['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => 'Lỗi xử lý: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Generate bulk PDFs from an Excel file and return as a ZIP.
      *
      * @param Request $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function generateBulkPdf(Request $request)
     {
@@ -233,6 +365,47 @@ class RecipientController extends Controller
     }
 
     /**
+     * Generate JPGs for each row.
+     *
+     * @param array $rows
+     * @param array $header
+     * @param string|null $mssvCol
+     * @param string $tempDir
+     * @return array
+     * @throws \Exception
+     */
+    private function generateJpgs(array $rows, array $header, ?string $mssvCol, string $tempDir): array
+    {
+        $jpgFiles = [];
+
+        foreach ($rows as $index => $row) {
+            // Map row data to fields
+            $data = $this->mapRowData($row, $header);
+            $processedData = $this->processData($data);
+
+            // Generate filename
+            $filename = $this->generateFilename($row, $mssvCol, $processedData['recipient_name'] ?? 'unknown', $index, 'jpg');
+            $filePathJpg = $tempDir . DIRECTORY_SEPARATOR . $filename;
+
+            try {
+                // Generate JPG
+                $this->generateSingleJpg($processedData, $filePathJpg);
+                $jpgFiles[] = $filePathJpg;
+            } catch (\Exception $e) {
+                Log::error('Error generating JPG', [
+                    'filename' => $filename,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                $this->cleanupTempFiles($jpgFiles, $tempDir);
+                throw new \Exception('Lỗi tạo JPG: ' . $e->getMessage());
+            }
+        }
+
+        return $jpgFiles;
+    }
+
+    /**
      * Generate PDFs for each row and ensure single-page output.
      *
      * @param array $rows
@@ -305,22 +478,75 @@ class RecipientController extends Controller
     }
 
     /**
-     * Generate a safe filename for the PDF.
+     * Generate a safe filename for the PDF or JPG.
      *
      * @param array $row
      * @param string|null $mssvCol
      * @param string $recipientName
      * @param int $index
+     * @param string $extension
      * @return string
      */
-    private function generateFilename(array $row, ?string $mssvCol, string $recipientName, int $index): string
+    private function generateFilename(array $row, ?string $mssvCol, string $recipientName, int $index, string $extension = 'pdf'): string
     {
         if ($mssvCol !== null && !empty($row[$mssvCol])) {
             $mssvValue = preg_replace('/[^A-Za-z0-9_\-]/', '_', $row[$mssvCol]);
-            return $mssvValue . '.pdf';
+            return $mssvValue . '.' . $extension;
         }
         $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $recipientName);
-        return 'Certificate_' . $cleanName . '_' . ($index + 1) . '.pdf';
+        return 'Certificate_' . $cleanName . '_' . ($index + 1) . '.' . $extension;
+    }
+
+    /**
+     * Generate a single JPG using Spatie PDF with fallback to Imagick.
+     *
+     * @param array $data
+     * @param string $filePathJpg
+     * @return void
+     * @throws \Exception
+     */
+    private function generateSingleJpg(array $data, string $filePathJpg): void
+    {
+        try {
+            // Try to generate JPG directly using Spatie PDF
+            $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
+                ->paperSize(177.7, 126.0)
+                ->margins(0, 0, 0, 0)
+                ->format('jpg'); // Try JPG format directly
+
+            // Save JPG file
+            $pdf->save($filePathJpg);
+            
+        } catch (\Exception $e) {
+            // Fallback: Use PDF to JPG conversion with Imagick
+            $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
+                ->paperSize(177.7, 126.0)
+                ->margins(0, 0, 0, 0);
+
+            // Save PDF temporarily
+            $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+            $pdf->save($tempPdfPath);
+
+            // Convert PDF to JPG using Imagick
+            if (extension_loaded('imagick')) {
+                $imagick = new \Imagick();
+                $imagick->setResolution(300, 300); // High resolution for better quality
+                $imagick->readImage($tempPdfPath);
+                $imagick->setImageFormat('jpeg');
+                $imagick->setImageCompressionQuality(95);
+                $imagick->mergeImageLayers(\Imagick::LAYER_MERGE_FLATTEN);
+
+                // Save JPG file
+                $imagick->writeImage($filePathJpg);
+
+                // Clean up temp PDF
+                unlink($tempPdfPath);
+            } else {
+                // If no Imagick, copy PDF file with JPG extension (fallback)
+                copy($tempPdfPath, $filePathJpg);
+                unlink($tempPdfPath);
+            }
+        }
     }
 
     /**
@@ -659,7 +885,6 @@ class RecipientController extends Controller
         if (!empty($data['program_english'])) {
             $data['program_english'] = trim($data['program_english']);
         }
-
         return $data;
     }
 
@@ -672,7 +897,6 @@ class RecipientController extends Controller
             $data = $request->validate([
                 'recipient_name' => 'required|string|max:255',
                 'award_title' => 'required|string|max:255',
-                'academic_year' => 'required|string|max:50',
                 'award_title_english' => 'required|string|max:500',
                 'program' => 'required|string|max:255',
                 'program_english' => 'nullable|string|max:255',

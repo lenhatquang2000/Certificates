@@ -289,7 +289,7 @@
             <div class="recipient-name">{{ strtoupper(trim($data['recipient_name'])) }}</div>
             <div class="program">LỚP: {{ strtoupper(trim($data['program'])) }}</div>
             <div class="program-english">(Class: {{ trim($data['program_english']) }})</div>
-            <div class="award-title">{{ $data['award_title'] }} {{ $data['academic_year'] }}</div>
+            <div class="award-title">{{ $data['award_title'] }}</div>
             <div class="award-title-english">({{ $data['award_title_english'] }})</div>
             <div class="right-block">
                 <div class="vietnamese-date">{{ $data['vietnamese_date'] }}</div>

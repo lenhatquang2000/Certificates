@@ -129,7 +129,10 @@
         <!-- Submit Buttons -->
         <div class="form-group mt-4">
             <button type="submit" class="btn btn-primary btn-lg">
-                <i class="fas fa-file-excel"></i> Generate Certificates / Tạo giấy khen hàng loạt
+                <i class="fas fa-file-pdf"></i> Generate PDF Certificates / Tạo giấy khen PDF hàng loạt
+            </button>
+            <button type="button" class="btn btn-success btn-lg" onclick="generateBulkJPG()">
+                <i class="fas fa-image"></i> Generate JPG Certificates / Tạo giấy khen JPG hàng loạt
             </button>
         </div>
 
@@ -205,5 +208,20 @@
             fileInput.style.borderColor = '';
         }
     });
+
+    function generateBulkJPG() {
+        const form = document.getElementById('bulkCertificateForm');
+        const fileInput = document.getElementById('excel_file');
+        
+        if (!fileInput.value) {
+            alert('Vui lòng chọn file Excel!');
+            fileInput.style.borderColor = 'red';
+            return;
+        }
+        
+        fileInput.style.borderColor = '';
+        form.action = "{{ route('certificate.generate.bulk.jpg') }}";
+        form.submit();
+    }
 </script>
 @endpush

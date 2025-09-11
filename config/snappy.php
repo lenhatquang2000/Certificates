@@ -44,9 +44,14 @@ return [
 
     'image' => [
         'enabled' => true,
-        'binary'  => env('WKHTML_IMG_BINARY', '/usr/local/bin/wkhtmltoimage'),
+        'binary'  => env('WKHTML_IMG_BINARY', 'C:\Program Files\Google\Chrome\Application\chrome.exe'),
         'timeout' => false,
-        'options' => [],
+        'options' => [
+            'enable-local-file-access' => true,
+            'disable-gpu' => true,
+            'no-sandbox' => true,
+            'disable-dev-shm-usage' => true,
+        ],
         'env'     => [],
     ],
 
