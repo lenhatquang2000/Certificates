@@ -117,11 +117,11 @@ Route::prefix('certificate')->name('certificate.')->group(function () {
 });
 
 // New Doctor Certificate Routes
-Route::prefix('new-doctor')->name('new-doctor.')->group(function () {
-    Route::get('/', [RecipientController::class, 'newDoctorCreate'])->name('create');
-    Route::post('/preview-pdf', [RecipientController::class, 'newDoctorPreviewPdf'])->name('preview.pdf');
-    Route::post('/generate-pdf', [RecipientController::class, 'newDoctorGeneratePdf'])->name('generate.pdf');
-    Route::post('/generate-jpg', [RecipientController::class, 'newDoctorGenerateJpg'])->name('generate.jpg');
+Route::prefix('new-student')->name('new-student.')->group(function () {
+    Route::get('/', [RecipientController::class, 'newStudentCreate'])->name('create');
+    Route::post('/preview-pdf', [RecipientController::class, 'newStudentPreviewPdf'])->name('preview.pdf');
+    Route::post('/generate-pdf', [RecipientController::class, 'newStudentGeneratePdf'])->name('generate.pdf');
+    Route::post('/generate-jpg', [RecipientController::class, 'newStudentGenerateJpg'])->name('generate.jpg');
 });
 
 Route::get('/create-certificate', [RecipientController::class, 'create'])->name('create.certificate');

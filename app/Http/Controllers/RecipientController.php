@@ -996,55 +996,76 @@ class RecipientController extends Controller
     /**
      * Show new doctor certificate creation form
      */
-    public function newDoctorCreate()
+    public function newStudentCreate()
     {
-        return view('certificate.new-doctor-create');
+        // Lấy danh sách ảnh nền từ thư mục newDoctorTemplate
+        $backgroundImages = [];
+        $templatePath = public_path('assets/newDoctorTemplate');
+        
+        if (is_dir($templatePath)) {
+            $files = scandir($templatePath);
+            foreach ($files as $file) {
+                if (pathinfo($file, PATHINFO_EXTENSION) === 'jpg' || pathinfo($file, PATHINFO_EXTENSION) === 'png') {
+                    $backgroundImages[] = [
+                        'filename' => $file,
+                        'display_name' => pathinfo($file, PATHINFO_FILENAME),
+                        'path' => 'assets/newDoctorTemplate/' . $file
+                    ];
+                }
+            }
+        }
+        
+        return view('certificate.new-student-create', compact('backgroundImages'));
     }
 
     /**
      * Preview new doctor certificate
      */
-    public function newDoctorPreviewPdf(Request $request)
+    public function newStudentPreviewPdf(Request $request)
     {
         $data = $request->validate([
-            'doctor_name' => 'required|string|max:255',
+            'student_name' => 'required|string|max:255',
+            'background_image' => 'required|string',
         ]);
 
         // Process data
         $processedData = [
-            'doctor_name' => strtoupper(trim($data['doctor_name']))
+            'student_name' => strtoupper(trim($data['student_name'])),
+            'background_image' => $data['background_image']
         ];
 
-        return view('certificate.new-doctor-template', compact('processedData'));
+        return view('certificate.new-student-template', compact('processedData'));
     }
 
     /**
      * Generate new doctor PDF
      */
-    public function newDoctorGeneratePdf(Request $request)
+    public function newStudentGeneratePdf(Request $request)
     {
         try {
             $data = $request->validate([
-                'doctor_name' => 'required|string|max:255',
+                'student_name' => 'required|string|max:255',
+                'background_image' => 'required|string',
             ]);
 
             // Process data
             $processedData = [
-                'doctor_name' => strtoupper(trim($data['doctor_name']))
+                'student_name' => strtoupper(trim($data['student_name'])),
+                'background_image' => $data['background_image']
             ];
 
             // Generate a safe filename
-            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['doctor_name']);
-            $filename = 'NewDoctor_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.pdf';
+            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['student_name']);
+            $filename = 'NewStudent_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.pdf';
 
             // Generate PDF
-            $pdf = Pdf::view('certificate.new-doctor-template', ['data' => $processedData])
+            $pdf = Pdf::view('certificate.new-student-template', ['data' => $processedData])
                 ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
                 ->margins(0, 0, 0, 0);
 
             return $pdf->save($filename);
         } catch (\Exception $e) {
-            \Log::error('New Doctor PDF generation failed', [
+            \Log::error('New Student PDF generation failed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -1055,24 +1076,26 @@ class RecipientController extends Controller
     /**
      * Generate new doctor JPG
      */
-    public function newDoctorGenerateJpg(Request $request)
+    public function newStudentGenerateJpg(Request $request)
     {
         try {
             $data = $request->validate([
-                'doctor_name' => 'required|string|max:255',
+                'student_name' => 'required|string|max:255',
+                'background_image' => 'required|string',
             ]);
 
             // Process data
             $processedData = [
-                'doctor_name' => strtoupper(trim($data['doctor_name']))
+                'student_name' => strtoupper(trim($data['student_name'])),
+                'background_image' => $data['background_image']
             ];
 
             // Generate a safe filename
-            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['doctor_name']);
-            $filename = 'NewDoctor_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
+            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['student_name']);
+            $filename = 'NewStudent_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
 
             // Step 1: Create PDF first
-            $pdf = Pdf::view('certificate.new-doctor-template', ['data' => $processedData])
+            $pdf = Pdf::view('certificate.new-student-template', ['data' => $processedData])
                 ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
                 ->margins(0, 0, 0, 0);
 
@@ -1095,7 +1118,7 @@ class RecipientController extends Controller
                     // Resize image to width = 1920px
                     $currentWidth = $imagick->getImageWidth();
                     $currentHeight = $imagick->getImageHeight();
-                    $targetWidth = 1920;
+                    $targetWidth = 1192;
                     
                     if ($currentWidth > $targetWidth) {
                         $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);
@@ -1127,7 +1150,7 @@ class RecipientController extends Controller
             }
 
         } catch (\Exception $e) {
-            \Log::error('New Doctor JPG generation failed', [
+            \Log::error('New Student JPG generation failed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

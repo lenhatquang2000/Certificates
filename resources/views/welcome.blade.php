@@ -12,7 +12,7 @@
         
         <div class="quick-links mb-4">
             <a href="{{ route('certificate.create') }}">Create Certificate</a> |
-            <a href="{{ route('new-doctor.create') }}">Create New Doctor</a>
+            <a href="{{ route('new-student.create') }}">Create New Student</a>
         </div>
 
         <div class="row">
@@ -31,11 +31,11 @@
             <div class="col-md-6 mb-3">
                 <div class="card">
                     <div class="card-body text-center">
-                        <h5 class="card-title"><i class="fa fa-user-md text-success"></i> New Doctor</h5>
-                        <p class="card-text">Tạo chứng chỉ tân bác sĩ</p>
-                        <a href="{{ route('new-doctor.create') }}" class="btn btn-success">
-                            <i class="fa fa-user-md me-1"></i>
-                            Create New Doctor Certificate
+                        <h5 class="card-title"><i class="fa fa-user-graduate text-success"></i> New Student</h5>
+                        <p class="card-text">Tạo chứng chỉ tân sinh viên với nhiều mẫu nền</p>
+                        <a href="{{ route('new-student.create') }}" class="btn btn-success">
+                            <i class="fa fa-user-graduate me-1"></i>
+                            Create New Student Certificate
                         </a>
                     </div>
                 </div>

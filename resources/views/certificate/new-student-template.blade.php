@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>New Doctor Certificate | PiSystem</title>
+    <title>New Student Certificate | PiSystem</title>
     <meta name="viewport" content="width=1192, initial-scale=1">
     <style>
         /* CSS RESET */
@@ -93,20 +93,23 @@
         .certificate-preview-bg {
             width: 1192px !important;
             height: 1482px !important;
-            background: url('data:image/jpeg;base64,{{ base64_encode(file_get_contents(public_path('assets/newDoctorTemplate/TÂN BÁC SĨ.jpg'))) }}') no-repeat;
+            background: url('data:image/jpeg;base64,{{ base64_encode(file_get_contents(public_path('assets/newDoctorTemplate/' . $data['background_image']))) }}') no-repeat;
             background-size: 100% 100%; /* Lấp đầy container mà không cắt xén */
             margin: 0 !important;
             padding: 0 !important;
             position: relative;
+            box-sizing: border-box;
         }
         #certificateContent {
             width: 1192px;
             height: 1482px;
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: relative;
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
+
+        /* Font definitions */
         @font-face {
             font-family: 'UTM HelvetIns';
             src: url('data:font/truetype;base64,{{ base64_encode(file_get_contents(public_path('fonts/UTM HelvetIns.ttf'))) }}') format('truetype');
@@ -138,29 +141,31 @@
             font-style: normal;
         }
         
-        /* Doctor Name - Có thể cần điều chỉnh vị trí tùy theo ảnh nền */
-        .doctor-name {
-            font-size: 32pt;
+        /* Student Name - Sử dụng font UVN Nguyen Du với màu vàng */
+        .student-name {
+            font-size: 56pt;
             text-transform: uppercase;
-            color: #2c3e50;
+            color: #f8f316; /* Màu vàng */
             line-height: 1.2;
             margin: 0;
-            font-family: 'UTM HelvetIns', Times, 'Times New Roman', serif;
+            /* Sử dụng đúng font UVN Nguyen Du như yêu cầu */
+            font-family: 'UVN Nguyen Du', Arial, Helvetica, sans-serif;
             position: absolute;
-            top: 300px; /* Điều chỉnh vị trí theo ảnh nền */
+            top: 924px; /* Điều chỉnh vị trí theo ảnh nền */
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
-            letter-spacing: 1px;
+            letter-spacing: 2px;
             text-align: center;
-            font-weight: bold;
+            /* Tăng khoảng cách giữa dấu mũ (dấu thanh) và ký tự */
+            /* Sử dụng thuộc tính font-feature-settings để tăng khoảng cách dấu */
         }
     </style>
 </head>
 <body>
     <div class="certificate-preview-bg">
         <div id="certificateContent">
-            <div class="doctor-name">{{ strtoupper(trim($data['doctor_name'])) }}</div>
+            <div class="student-name">{{ strtoupper(trim($processedData['student_name'])) }}</div>
         </div>
     </div>
 </body>
