@@ -111,9 +111,17 @@ Route::prefix('certificate')->name('certificate.')->group(function () {
     Route::get('/bulk', [RecipientController::class, 'bulk'])->name('bulk');
     Route::post('/preview', [RecipientController::class, 'preview'])->name('preview');
     Route::post('/preview-pdf', [RecipientController::class, 'previewPdf'])->name('preview.pdf');
-    Route::post('/generate-pdf', [RecipientController::class, 'generatePdf'])->name('generate.pdf');
-    Route::post('/generate-jpg', [RecipientController::class, 'generateJpg'])->name('generate.jpg');
+    Route::post('/generate-pdf', [RecipientController::class, 'generateUnified'])->name('generate.pdf');
+    Route::post('/generate-jpg', [RecipientController::class, 'generateUnifiedJpg'])->name('generate.jpg');
     Route::post('/preview-ajax', [RecipientController::class, 'previewAjax'])->name('preview.ajax');
+});
+
+// New Doctor Certificate Routes
+Route::prefix('new-doctor')->name('new-doctor.')->group(function () {
+    Route::get('/', [RecipientController::class, 'newDoctorCreate'])->name('create');
+    Route::post('/preview-pdf', [RecipientController::class, 'newDoctorPreviewPdf'])->name('preview.pdf');
+    Route::post('/generate-pdf', [RecipientController::class, 'newDoctorGeneratePdf'])->name('generate.pdf');
+    Route::post('/generate-jpg', [RecipientController::class, 'newDoctorGenerateJpg'])->name('generate.jpg');
 });
 
 Route::get('/create-certificate', [RecipientController::class, 'create'])->name('create.certificate');

@@ -25,13 +25,14 @@
     <header class="bg-primary text-white p-3 mb-4">
         <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between">
             <h1 class="mb-2 mb-md-0">
-                <i class="bi bi-cpu me-2"></i>PiSystem
+                <a href="/" class="text-white text-decoration-none">
+                    <i class="bi bi-cpu me-2"></i>PiSystem
+                </a>
             </h1>
             <nav>
-                <a href="/" class="text-white me-3"><i class="fa fa-tachometer-alt me-1"></i>Dashboard</a>
-                <a href="/modules" class="text-white me-3"><i class="fa fa-cubes me-1"></i>Modules</a>
-                <a href="/reports" class="text-white me-3"><i class="fa fa-chart-bar me-1"></i>Reports</a>
-                <a href="/settings" class="text-white"><i class="fa fa-cog me-1"></i>Settings</a>
+                <a href="{{ route('welcome') }}" class="text-white me-3"><i class="fa fa-tachometer-alt me-1"></i>Dashboard</a>
+                <a href="{{ route('certificate.create') }}" class="text-white me-3"><i class="fa fa-certificate me-1"></i>Certificate</a>
+                <a href="{{ route('new-doctor.create') }}" class="text-white me-3"><i class="fa fa-user-md me-1"></i>New Doctor</a>
             </nav>
         </div>
     </header>

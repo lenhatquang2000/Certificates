@@ -93,6 +93,7 @@ class RecipientController extends Controller
                 'issue_year' => 'required|integer|min:2020|max:2030',
                 'location' => 'required|string|max:100',
                 'decision_prefix' => 'nullable|string|max:50',
+                'decision_prefix_english' => 'nullable|string|max:50',
                 'rector_name' => 'required|string|max:100',
                 'position_adjustments' => 'nullable|array',
             ]);
@@ -194,6 +195,7 @@ class RecipientController extends Controller
                 'issue_year' => 'required|integer|min:2020|max:2030',
                 'location' => 'required|string|max:100',
                 'decision_prefix' => 'nullable|string|max:50',
+                'decision_prefix_english' => 'nullable|string|max:50',
                 'rector_name' => 'required|string|max:100',
                 'position_adjustments' => 'nullable|array',
             ]);
@@ -230,11 +232,39 @@ class RecipientController extends Controller
 
     public function create()
     {
-        return view('certificate.create');
+        return view('certificate.create-unified');
     }
     public function bulk()
     {
-        return view('certificate.createwithexcel');
+        return view('certificate.create-unified');
+    }
+
+    /**
+     * Unified method to handle both single and bulk certificate generation
+     */
+    public function generateUnified(Request $request)
+    {
+        // Check if Excel file is uploaded (bulk mode)
+        if ($request->hasFile('excel_file')) {
+            return $this->generateBulkPdf($request);
+        } else {
+            // Single mode - validate and generate single PDF
+            return $this->generatePdf($request);
+        }
+    }
+
+    /**
+     * Unified method to handle both single and bulk JPG generation
+     */
+    public function generateUnifiedJpg(Request $request)
+    {
+        // Check if Excel file is uploaded (bulk mode)
+        if ($request->hasFile('excel_file')) {
+            return $this->generateBulkJpg($request);
+        } else {
+            // Single mode - validate and generate single JPG
+            return $this->generateJpg($request);
+        }
     }
     
     /**
@@ -821,8 +851,8 @@ class RecipientController extends Controller
      */
     private function processData($data)
     {
-        $data['recipient_name'] = strtoupper(trim($data['recipient_name']));
-        $data['program'] = strtoupper(trim($data['program']));
+        $data['recipient_name'] = strtoupper(trim($data['recipient_name'] ?? ''));
+        $data['program'] = strtoupper(trim($data['program'] ?? ''));
 
         $issueDate = Carbon::createFromDate(
             $data['issue_year'],
@@ -830,8 +860,8 @@ class RecipientController extends Controller
             $data['issue_day']
         );
 
-        $data['decision_number'] = trim($data['decision_prefix']);
-        $data['decision_prefix_english'] = trim($data['decision_prefix_english']);
+        $data['decision_number'] = trim($data['decision_prefix'] ?? '');
+        $data['decision_prefix_english'] = trim($data['decision_prefix_english'] ?? '');
 
         $data['vietnamese_date'] = $data['location'] . ', ngày ' . $data['issue_day']
             . ' tháng ' . $data['issue_month']
@@ -912,9 +942,9 @@ class RecipientController extends Controller
         }
         $data['english_date'] = '(' . $englishLocation . ', ' . $issueDate->format('F j, Y') . ')';
 
-        $data['rector_name'] = trim($data['rector_name']);
+        $data['rector_name'] = trim($data['rector_name'] ?? '');
 
-        if (!empty($data['program_english'])) {
+        if (!empty($data['program_english'] ?? '')) {
             $data['program_english'] = trim($data['program_english']);
         }
         return $data;
@@ -937,6 +967,7 @@ class RecipientController extends Controller
                 'issue_year' => 'required|integer|min:2020|max:2030',
                 'location' => 'required|string|max:100',
                 'decision_prefix' => 'nullable|string|max:50',
+                'decision_prefix_english' => 'nullable|string|max:50',
                 'rector_name' => 'required|string|max:100',
             ]);
 
@@ -957,6 +988,150 @@ class RecipientController extends Controller
                     ? $e->errors()
                     : ['general' => [$e->getMessage()]]
             ], 422);
+        }
+    }
+
+    // ==================== NEW DOCTOR CERTIFICATE METHODS ====================
+
+    /**
+     * Show new doctor certificate creation form
+     */
+    public function newDoctorCreate()
+    {
+        return view('certificate.new-doctor-create');
+    }
+
+    /**
+     * Preview new doctor certificate
+     */
+    public function newDoctorPreviewPdf(Request $request)
+    {
+        $data = $request->validate([
+            'doctor_name' => 'required|string|max:255',
+        ]);
+
+        // Process data
+        $processedData = [
+            'doctor_name' => strtoupper(trim($data['doctor_name']))
+        ];
+
+        return view('certificate.new-doctor-template', compact('processedData'));
+    }
+
+    /**
+     * Generate new doctor PDF
+     */
+    public function newDoctorGeneratePdf(Request $request)
+    {
+        try {
+            $data = $request->validate([
+                'doctor_name' => 'required|string|max:255',
+            ]);
+
+            // Process data
+            $processedData = [
+                'doctor_name' => strtoupper(trim($data['doctor_name']))
+            ];
+
+            // Generate a safe filename
+            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['doctor_name']);
+            $filename = 'NewDoctor_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.pdf';
+
+            // Generate PDF
+            $pdf = Pdf::view('certificate.new-doctor-template', ['data' => $processedData])
+                ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
+                ->margins(0, 0, 0, 0);
+
+            return $pdf->save($filename);
+        } catch (\Exception $e) {
+            \Log::error('New Doctor PDF generation failed', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->withErrors(['error' => 'Lỗi tạo PDF: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Generate new doctor JPG
+     */
+    public function newDoctorGenerateJpg(Request $request)
+    {
+        try {
+            $data = $request->validate([
+                'doctor_name' => 'required|string|max:255',
+            ]);
+
+            // Process data
+            $processedData = [
+                'doctor_name' => strtoupper(trim($data['doctor_name']))
+            ];
+
+            // Generate a safe filename
+            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $processedData['doctor_name']);
+            $filename = 'NewDoctor_' . $cleanName . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
+
+            // Step 1: Create PDF first
+            $pdf = Pdf::view('certificate.new-doctor-template', ['data' => $processedData])
+                ->paperSize(315, 392) // 1192x1482px converted to mm (1192/3.78, 1482/3.78)
+                ->margins(0, 0, 0, 0);
+
+            // Save PDF temporarily
+            $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+            $pdf->save($tempPdfPath);
+
+            // Step 2: Convert PDF to JPG with high DPI quality
+            if (extension_loaded('imagick')) {
+                try {
+                    $imagick = new \Imagick();
+                    $imagick->setResolution(600, 600);
+                    $imagick->readImage($tempPdfPath);
+                    $imagick->setImageFormat('jpeg');
+                    $imagick->setImageCompressionQuality(100);
+                    $imagick->setImageCompression(\Imagick::COMPRESSION_JPEG);
+                    $imagick->setImageDepth(8);
+                    $imagick = $imagick->flattenImages();
+
+                    // Resize image to width = 1920px
+                    $currentWidth = $imagick->getImageWidth();
+                    $currentHeight = $imagick->getImageHeight();
+                    $targetWidth = 1920;
+                    
+                    if ($currentWidth > $targetWidth) {
+                        $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);
+                        $imagick->resizeImage($targetWidth, $targetHeight, \Imagick::FILTER_LANCZOS, 1);
+                    }
+
+                    // Clean up temp PDF
+                    unlink($tempPdfPath);
+
+                    // Return JPG as response
+                    return response($imagick->getImageBlob(), 200)
+                        ->header('Content-Type', 'image/jpeg')
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+                } catch (\Exception $e) {
+                    // Clean up temp PDF on error
+                    if (file_exists($tempPdfPath)) {
+                        unlink($tempPdfPath);
+                    }
+                    \Log::error('Error converting PDF to JPG with Imagick', [
+                        'message' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    return back()->withErrors(['error' => 'Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage()]);
+                }
+            } else {
+                // If no Imagick, return PDF instead
+                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('New Doctor JPG generation failed', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e->getMessage()]);
         }
     }
 }
