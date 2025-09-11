@@ -126,8 +126,17 @@ class RecipientController extends Controller
                     // Additional quality optimizations
                     $imagick->setImageCompression(\Imagick::COMPRESSION_JPEG);
                     $imagick->setImageDepth(8);
-                    // Flatten layers to ensure single image output
                     $imagick = $imagick->flattenImages();
+
+                    // Resize image to width = 1920px, height will be calculated proportionally
+                    $currentWidth = $imagick->getImageWidth();
+                    $currentHeight = $imagick->getImageHeight();
+                    $targetWidth = 1920;
+                    
+                    if ($currentWidth > $targetWidth) {
+                        $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);
+                        $imagick->resizeImage($targetWidth, $targetHeight, \Imagick::FILTER_LANCZOS, 1);
+                    }
 
                     // Clean up temp PDF
                     unlink($tempPdfPath);
@@ -541,6 +550,16 @@ class RecipientController extends Controller
                 $imagick->setImageDepth(8);
                 // Flatten layers to ensure single image output
                 $imagick = $imagick->flattenImages();
+
+                // Resize image to width = 1920px, height will be calculated proportionally
+                $currentWidth = $imagick->getImageWidth();
+                $currentHeight = $imagick->getImageHeight();
+                $targetWidth = 1920;
+                
+                if ($currentWidth > $targetWidth) {
+                    $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);
+                    $imagick->resizeImage($targetWidth, $targetHeight, \Imagick::FILTER_LANCZOS, 1);
+                }
 
                 // Save JPG file
                 $imagick->writeImage($jpgPath);
