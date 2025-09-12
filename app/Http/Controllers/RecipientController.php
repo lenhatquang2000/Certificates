@@ -132,7 +132,7 @@ class RecipientController extends Controller
                     // Resize image to width = 1920px, height will be calculated proportionally
                     $currentWidth = $imagick->getImageWidth();
                     $currentHeight = $imagick->getImageHeight();
-                    $targetWidth = 1920;
+                    $targetWidth = 1192;
                     
                     if ($currentWidth > $targetWidth) {
                         $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);
@@ -581,10 +581,10 @@ class RecipientController extends Controller
                 // Flatten layers to ensure single image output
                 $imagick = $imagick->flattenImages();
 
-                // Resize image to width = 1920px, height will be calculated proportionally
+                // Resize image to width = 1920px, height will be calculated proportionallyf$targetWidth = 1920;
                 $currentWidth = $imagick->getImageWidth();
                 $currentHeight = $imagick->getImageHeight();
-                $targetWidth = 1920;
+                $targetWidth = 1192;
                 
                 if ($currentWidth > $targetWidth) {
                     $targetHeight = intval(($currentHeight * $targetWidth) / $currentWidth);

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\RecipientController;
 use App\Http\Controllers\PdfController;
+use App\Http\Controllers\ExcelController;
 
 Route::get('/test-pdf', function () {
     return \Barryvdh\Snappy\Facades\SnappyPdf::loadHTML('<h1>Hello PDF</h1>')
@@ -130,3 +131,7 @@ Route::post('/create-certificate-bulk-jpg', [RecipientController::class, 'genera
 Route::get('/preview-certificate', [RecipientController::class, 'previewPdf'])->name('preview.certificate');
 Route::post('/pdf/add-background', [PdfController::class, 'addBackground'])->name('pdf.add-background');
 Route::get('/pdf/upload', [PdfController::class, 'showUploadForm'])->name('pdf.upload.form');
+
+// Excel file check routes
+Route::get('/check-excel', [ExcelController::class, 'checkExcelFile'])->name('excel.check');
+Route::get('/api/check-excel', [ExcelController::class, 'checkExcelFileApi'])->name('excel.check.api');

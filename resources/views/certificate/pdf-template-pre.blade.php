@@ -149,7 +149,7 @@
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
-            letter-spacing: -2px;
+            letter-spacing: -1px;
         }
         .program {
             font-size: 20pt;
@@ -296,11 +296,7 @@
                 <div class="english-date">{{ $data['english_date'] }}</div>
                 <div class="rector-label" style="position: relative; z-index: 1;">HIỆU TRƯỞNG/RECTOR</div>
                 <div style="position: relative; margin-top: -10px; z-index: 3;">
-                    <img 
-                        src="data:image/png;base64,{{ base64_encode(file_get_contents(public_path('assets/template/sign.png'))) }}" 
-                        alt="Rector Signature" 
-                        style="height:120px; display:block; margin-left:auto; margin-right:auto; position: relative; z-index: 4; margin-top: -34px; left: -40px"
-                    >
+                    <div style="height:120px; display:block; margin-left:auto; margin-right:auto; position: relative; z-index: 4; margin-top: -34px; left: -40px"></div>
                 </div>
                 <div class="rector-name" style="position: relative; z-index: 2;">{{ trim($data['rector_name']) }}</div>
             </div>
