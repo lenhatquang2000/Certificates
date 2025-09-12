@@ -1096,6 +1096,20 @@ class RecipientController extends Controller
     }
 
     /**
+     * Unified method to handle both single and bulk New Student generation
+     */
+    public function newStudentGenerateUnified(Request $request)
+    {
+        // Check if Excel file is uploaded (bulk mode)
+        if ($request->hasFile('excel_file')) {
+            return $this->newStudentGenerateBulkJpg($request);
+        } else {
+            // Single mode - validate and generate single JPG
+            return $this->newStudentGenerateJpg($request);
+        }
+    }
+
+    /**
      * Generate new doctor JPG
      */
     public function newStudentGenerateJpg(Request $request)
@@ -1186,5 +1200,180 @@ class RecipientController extends Controller
             ]);
             return back()->withErrors(['error' => 'Lỗi tạo JPG: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Generate bulk New Student JPGs from Excel file
+     */
+    public function newStudentGenerateBulkJpg(Request $request)
+    {
+        // Validate the uploaded Excel file
+        $request->validate([
+            'excel_file' => 'required|file|mimes:xlsx,xls'
+        ]);
+
+        $filePath = $request->file('excel_file')->getRealPath();
+        $tempDir = $this->createTempDirectory();
+
+        try {
+            // Load and parse Excel data
+            $data = $this->loadExcelData($filePath);
+            $header = $data['header'];
+            $rows = $data['rows'];
+
+            // Validate required columns
+            $requiredColumns = ['MSSV', 'DANH HIỆU', 'HỌ VÀ TÊN'];
+            $columnMapping = $this->mapNewStudentColumns($header, $requiredColumns);
+
+            // Generate JPGs
+            $jpgFiles = $this->generateNewStudentJpgs($rows, $columnMapping, $tempDir);
+
+            // Create ZIP file
+            $zipFilePath = $this->createZipFile($jpgFiles);
+
+            // Clean up temporary files
+            $this->cleanupTempFiles($jpgFiles, $tempDir);
+
+            // Return ZIP file for download
+            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            $this->cleanupTempFiles([], $tempDir);
+            Log::error('Error in newStudentGenerateBulkJpg', ['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => 'Lỗi xử lý: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Map Excel columns to required fields for New Student
+     */
+    private function mapNewStudentColumns(array $header, array $requiredColumns): array
+    {
+        $mapping = [];
+        $missingColumns = [];
+
+        foreach ($requiredColumns as $required) {
+            $found = false;
+            foreach ($header as $col => $field) {
+                if (strtolower(trim($field)) === strtolower(trim($required))) {
+                    $mapping[$required] = $col;
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                $missingColumns[] = $required;
+            }
+        }
+
+        if (!empty($missingColumns)) {
+            throw new \Exception('Thiếu các cột bắt buộc: ' . implode(', ', $missingColumns));
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * Generate New Student JPGs for each row
+     */
+    private function generateNewStudentJpgs(array $rows, array $columnMapping, string $tempDir): array
+    {
+        $jpgFiles = [];
+        $titleMapping = [
+            'TÂN BÁC SĨ' => 'TÂN BÁC SĨ.jpg',
+            'TÂN DƯỢC SĨ' => 'TÂN DƯỢC SĨ.jpg',
+            'TÂN CỬ NHÂN' => 'TÂN CỬ NHÂN.jpg'
+        ];
+
+        foreach ($rows as $index => $row) {
+            try {
+                // Extract data from row
+                $mssv = trim($row[$columnMapping['MSSV']] ?? '');
+                $danhHieu = trim($row[$columnMapping['DANH HIỆU']] ?? '');
+                $hoTen = trim($row[$columnMapping['HỌ VÀ TÊN']] ?? '');
+
+                // Validate required data
+                if (empty($mssv) || empty($danhHieu) || empty($hoTen)) {
+                    Log::warning('Skipping row with missing data', [
+                        'row' => $index + 1,
+                        'mssv' => $mssv,
+                        'danh_hieu' => $danhHieu,
+                        'ho_ten' => $hoTen
+                    ]);
+                    continue;
+                }
+
+                // Map danh hieu to background image
+                if (!isset($titleMapping[$danhHieu])) {
+                    Log::warning('Unknown danh hieu', [
+                        'row' => $index + 1,
+                        'danh_hieu' => $danhHieu
+                    ]);
+                    continue;
+                }
+
+                $backgroundImage = $titleMapping[$danhHieu];
+
+                // Check if background image exists
+                $backgroundPath = public_path('assets/newDoctorTemplate/' . $backgroundImage);
+                if (!file_exists($backgroundPath)) {
+                    Log::error('Background image not found', [
+                        'row' => $index + 1,
+                        'background' => $backgroundImage,
+                        'path' => $backgroundPath
+                    ]);
+                    continue;
+                }
+
+                // Prepare data for template
+                $processedData = [
+                    'student_name' => strtoupper($hoTen),
+                    'background_image' => $backgroundImage
+                ];
+
+                // Generate filename using MSSV
+                $cleanMssv = preg_replace('/[^A-Za-z0-9_\-]/', '_', $mssv);
+                $filename = $cleanMssv . '.jpg';
+                $filePathJpg = $tempDir . DIRECTORY_SEPARATOR . $filename;
+
+                // Generate JPG
+                $this->generateSingleNewStudentJpg($processedData, $filePathJpg);
+                $jpgFiles[] = $filePathJpg;
+
+                Log::info('Generated New Student JPG', [
+                    'mssv' => $mssv,
+                    'filename' => $filename,
+                    'danh_hieu' => $danhHieu
+                ]);
+
+            } catch (\Exception $e) {
+                Log::error('Error generating New Student JPG', [
+                    'row' => $index + 1,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                // Continue with next row instead of stopping
+                continue;
+            }
+        }
+
+        return $jpgFiles;
+    }
+
+    /**
+     * Generate a single New Student JPG
+     */
+    private function generateSingleNewStudentJpg(array $data, string $filePathJpg): void
+    {
+        // Step 1: Create PDF first
+        $pdf = Pdf::view('certificate.new-student-template', ['processedData' => $data])
+            ->paperSize(315, 392) // 1192x1482px converted to mm
+            ->margins(0, 0, 0, 0);
+
+        // Save PDF temporarily
+        $tempPdfPath = storage_path('app/temp_' . uniqid() . '.pdf');
+        $pdf->save($tempPdfPath);
+
+        // Step 2: Convert PDF to JPG with high DPI quality
+        $this->convertPdfToJpg($tempPdfPath, $filePathJpg);
     }
 }

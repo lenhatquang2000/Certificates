@@ -121,7 +121,7 @@ Route::prefix('new-student')->name('new-student.')->group(function () {
     Route::get('/', [RecipientController::class, 'newStudentCreate'])->name('create');
     Route::post('/preview-pdf', [RecipientController::class, 'newStudentPreviewPdf'])->name('preview.pdf');
     Route::post('/generate-pdf', [RecipientController::class, 'newStudentGeneratePdf'])->name('generate.pdf');
-    Route::post('/generate-jpg', [RecipientController::class, 'newStudentGenerateJpg'])->name('generate.jpg');
+    Route::post('/generate-jpg', [RecipientController::class, 'newStudentGenerateUnified'])->name('generate.jpg');
 });
 
 Route::get('/create-certificate', [RecipientController::class, 'create'])->name('create.certificate');
