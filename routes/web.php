@@ -10,6 +10,8 @@ Route::get('/test-pdf', function () {
         ->inline('test.pdf');
 });
 
+Route::get('/system-status', [RecipientController::class, 'checkSystemStatus'])->name('system.status');
+
 Route::get('/test-imagick', function () {
     $html = '<h1>PHP Imagick Test</h1><hr>';
     

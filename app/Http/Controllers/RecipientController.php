@@ -75,11 +75,34 @@ class RecipientController extends Controller
     }
 
     /**
+     * Check system status for debugging
+     */
+    public function checkSystemStatus()
+    {
+        $status = [
+            'imagick_loaded' => extension_loaded('imagick'),
+            'imagick_version' => extension_loaded('imagick') ? \Imagick::getVersion()['versionString'] : 'Not available',
+            'memory_limit' => ini_get('memory_limit'),
+            'max_execution_time' => ini_get('max_execution_time'),
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'post_max_size' => ini_get('post_max_size'),
+            'storage_writable' => is_writable(storage_path('app')),
+            'temp_dir_exists' => is_dir(storage_path('app')),
+        ];
+        
+        return response()->json($status);
+    }
+
+    /**
      * Generate JPG image from certificate template
      * New logic: Always create PDF first, then convert to JPG with high DPI
      */
     public function generateJpg(Request $request)
     {
+        // Increase memory limit and execution time for image processing
+        ini_set('memory_limit', '512M');
+        set_time_limit(300); // 5 minutes
+        
         try {
             // Validate input data
             $data = $request->validate([
@@ -107,7 +130,7 @@ class RecipientController extends Controller
 
             // Step 1: Always create PDF first using the same logic as generatePdf
             $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
-                ->paperSize(177.7, 126.0)
+                ->paperSize(223, 157) // 842x595px converted to mm
                 ->margins(0, 0, 0, 0);
 
             // Save PDF temporarily
@@ -117,9 +140,14 @@ class RecipientController extends Controller
             // Step 2: Convert PDF to JPG with high DPI quality
             if (extension_loaded('imagick')) {
                 try {
+                    // Check if temp PDF file exists and is readable
+                    if (!file_exists($tempPdfPath) || !is_readable($tempPdfPath)) {
+                        throw new \Exception('Temp PDF file not found or not readable: ' . $tempPdfPath);
+                    }
+                    
                     $imagick = new \Imagick();
-                    // Set very high resolution for excellent quality (600 DPI)
-                    $imagick->setResolution(600, 600);
+                    // Set resolution for good quality (300 DPI)
+                    $imagick->setResolution(300, 300);
                     $imagick->readImage($tempPdfPath);
                     $imagick->setImageFormat('jpeg');
                     // Maximum quality compression
@@ -129,7 +157,7 @@ class RecipientController extends Controller
                     $imagick->setImageDepth(8);
                     $imagick = $imagick->flattenImages();
 
-                    // Resize image to width = 1920px, height will be calculated proportionally
+                    // Resize image to width = 1192px, height will be calculated proportionally
                     $currentWidth = $imagick->getImageWidth();
                     $currentHeight = $imagick->getImageHeight();
                     $targetWidth = 1192;
@@ -139,19 +167,22 @@ class RecipientController extends Controller
                         $imagick->resizeImage($targetWidth, $targetHeight, \Imagick::FILTER_LANCZOS, 1);
                     }
 
-                    // Clean up temp PDF
-                    unlink($tempPdfPath);
+                    // Clean up temp PDF - COMMENTED OUT TO KEEP TMP FILES
+                    // unlink($tempPdfPath);
 
                     // Return JPG as response
                     return response($imagick->getImageBlob(), 200)
                         ->header('Content-Type', 'image/jpeg')
-                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+                        ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                        ->header('Pragma', 'no-cache')
+                        ->header('Expires', '0');
 
                 } catch (\Exception $e) {
-                    // Clean up temp PDF on error
-                    if (file_exists($tempPdfPath)) {
-                        unlink($tempPdfPath);
-                    }
+                // Clean up temp PDF on error - COMMENTED OUT TO KEEP TMP FILES
+                // if (file_exists($tempPdfPath)) {
+                //     unlink($tempPdfPath);
+                // }
                     \Log::error('Error converting PDF to JPG with Imagick', [
                         'message' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),
@@ -159,8 +190,8 @@ class RecipientController extends Controller
                     return back()->withErrors(['error' => 'Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage()]);
                 }
             } else {
-                // If no Imagick, return PDF instead
-                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
+                // If no Imagick, return PDF instead - COMMENTED OUT deleteFileAfterSend TO KEEP TMP FILES
+                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename));
             }
 
         } catch (\Exception $e) {
@@ -210,7 +241,7 @@ class RecipientController extends Controller
             // Generate PDF and return as response
             try {
                 $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $processedData])
-                    ->paperSize(177.7, 126.0)
+                    ->paperSize(223, 157) // 842x595px converted to mm
                     ->margins(0, 0, 0, 0);
 
                 return $pdf->save($filename);
@@ -275,6 +306,10 @@ class RecipientController extends Controller
      */
     public function generateBulkJpg(Request $request)
     {
+        // Increase memory limit and execution time for bulk processing
+        ini_set('memory_limit', '1024M');
+        set_time_limit(600); // 10 minutes
+        
         // Validate the uploaded Excel file
         $request->validate([
             'excel_file' => 'required|file|mimes:xlsx,xls'
@@ -299,8 +334,8 @@ class RecipientController extends Controller
             // Clean up temporary files
             $this->cleanupTempFiles($jpgFiles, $tempDir);
 
-            // Return ZIP file for download
-            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+            // Return ZIP file for download - COMMENTED OUT deleteFileAfterSend TO KEEP TMP FILES
+            return response()->download($zipFilePath);
         } catch (\Exception $e) {
             $this->cleanupTempFiles([], $tempDir);
             Log::error('Error in generateBulkJpg', ['error' => $e->getMessage()]);
@@ -316,6 +351,10 @@ class RecipientController extends Controller
      */
     public function generateBulkPdf(Request $request)
     {
+        // Increase memory limit and execution time for bulk processing
+        ini_set('memory_limit', '1024M');
+        set_time_limit(600); // 10 minutes
+        
         // Validate the uploaded Excel file
         $request->validate([
             'excel_file' => 'required|file|mimes:xlsx,xls'
@@ -340,8 +379,8 @@ class RecipientController extends Controller
             // Clean up temporary files
             $this->cleanupTempFiles($pdfFiles, $tempDir);
 
-            // Return ZIP file for download
-            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+            // Return ZIP file for download - COMMENTED OUT deleteFileAfterSend TO KEEP TMP FILES
+            return response()->download($zipFilePath);
         } catch (\Exception $e) {
             $this->cleanupTempFiles([], $tempDir);
             Log::error('Error in generateBulkPdf', ['error' => $e->getMessage()]);
@@ -545,7 +584,7 @@ class RecipientController extends Controller
     {
         // Step 1: Always create PDF first using the same logic as generatePdf
         $pdf = Pdf::view('certificate.pdf-template-pre', ['data' => $data])
-            ->paperSize(177.7, 126.0)
+            ->paperSize(223, 157) // 842x595px converted to mm
             ->margins(0, 0, 0, 0);
 
         // Save PDF temporarily
@@ -569,8 +608,8 @@ class RecipientController extends Controller
         if (extension_loaded('imagick')) {
             try {
                 $imagick = new \Imagick();
-                // Set very high resolution for excellent quality (600 DPI)
-                $imagick->setResolution(600, 600);
+                // Set resolution for good quality (300 DPI)
+                $imagick->setResolution(300, 300);
                 $imagick->readImage($pdfPath);
                 $imagick->setImageFormat('jpeg');
                 // Maximum quality compression
@@ -581,7 +620,7 @@ class RecipientController extends Controller
                 // Flatten layers to ensure single image output
                 $imagick = $imagick->flattenImages();
 
-                // Resize image to width = 1920px, height will be calculated proportionallyf$targetWidth = 1920;
+                // Resize image to width = 1920px, height will be calculated proportionally
                 $currentWidth = $imagick->getImageWidth();
                 $currentHeight = $imagick->getImageHeight();
                 $targetWidth = 1192;
@@ -594,20 +633,20 @@ class RecipientController extends Controller
                 // Save JPG file
                 $imagick->writeImage($jpgPath);
 
-                // Clean up temp PDF
-                unlink($pdfPath);
+                // Clean up temp PDF - COMMENTED OUT TO KEEP TMP FILES
+                // unlink($pdfPath);
                 
             } catch (\Exception $e) {
-                // Clean up temp PDF on error
-                if (file_exists($pdfPath)) {
-                    unlink($pdfPath);
-                }
+                // Clean up temp PDF on error - COMMENTED OUT TO KEEP TMP FILES
+                // if (file_exists($pdfPath)) {
+                //     unlink($pdfPath);
+                // }
                 throw new \Exception('Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage());
             }
         } else {
-            // If no Imagick, copy PDF file with JPG extension (fallback)
+            // If no Imagick, copy PDF file with JPG extension (fallback) - COMMENTED OUT TO KEEP TMP FILES
             copy($pdfPath, $jpgPath);
-            unlink($pdfPath);
+            // unlink($pdfPath);
         }
     }
 
@@ -623,7 +662,7 @@ class RecipientController extends Controller
     {
         // Generate initial PDF with custom Chromium path
         Pdf::view('certificate.pdf-template-pre', ['data' => $data])
-            ->paperSize(177.7, 126.0)
+            ->paperSize(223, 157) // 842x595px converted to mm
             ->margins(0, 0, 0, 0)
             ->save($filePathPdf);
 
@@ -682,14 +721,15 @@ class RecipientController extends Controller
      */
     private function cleanupTempFiles(array $pdfFiles, string $tempDir): void
     {
-        foreach ($pdfFiles as $pdfFile) {
-            if (file_exists($pdfFile)) {
-                unlink($pdfFile);
-            }
-        }
-        if (file_exists($tempDir)) {
-            rmdir($tempDir);
-        }
+        // COMMENTED OUT TO KEEP TMP FILES FOR MANUAL DELETION
+        // foreach ($pdfFiles as $pdfFile) {
+        //     if (file_exists($pdfFile)) {
+        //         unlink($pdfFile);
+        //     }
+        // }
+        // if (file_exists($tempDir)) {
+        //     rmdir($tempDir);
+        // }
     }
 
     /**
@@ -1114,6 +1154,10 @@ class RecipientController extends Controller
      */
     public function newStudentGenerateJpg(Request $request)
     {
+        // Increase memory limit and execution time for image processing
+        ini_set('memory_limit', '512M');
+        set_time_limit(300); // 5 minutes
+        
         try {
             $data = $request->validate([
                 'student_name' => 'required|string|max:255',
@@ -1150,7 +1194,7 @@ class RecipientController extends Controller
             if (extension_loaded('imagick')) {
                 try {
                     $imagick = new \Imagick();
-                    $imagick->setResolution(600, 600);
+                    $imagick->setResolution(300, 300);
                     $imagick->readImage($tempPdfPath);
                     $imagick->setImageFormat('jpeg');
                     $imagick->setImageCompressionQuality(100);
@@ -1168,19 +1212,22 @@ class RecipientController extends Controller
                         $imagick->resizeImage($targetWidth, $targetHeight, \Imagick::FILTER_LANCZOS, 1);
                     }
 
-                    // Clean up temp PDF
-                    unlink($tempPdfPath);
+                    // Clean up temp PDF - COMMENTED OUT TO KEEP TMP FILES
+                    // unlink($tempPdfPath);
 
                     // Return JPG as response
                     return response($imagick->getImageBlob(), 200)
                         ->header('Content-Type', 'image/jpeg')
-                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+                        ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                        ->header('Pragma', 'no-cache')
+                        ->header('Expires', '0');
 
                 } catch (\Exception $e) {
-                    // Clean up temp PDF on error
-                    if (file_exists($tempPdfPath)) {
-                        unlink($tempPdfPath);
-                    }
+                // Clean up temp PDF on error - COMMENTED OUT TO KEEP TMP FILES
+                // if (file_exists($tempPdfPath)) {
+                //     unlink($tempPdfPath);
+                // }
                     \Log::error('Error converting PDF to JPG with Imagick', [
                         'message' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),
@@ -1188,8 +1235,8 @@ class RecipientController extends Controller
                     return back()->withErrors(['error' => 'Lỗi chuyển đổi PDF sang JPG: ' . $e->getMessage()]);
                 }
             } else {
-                // If no Imagick, return PDF instead
-                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename))->deleteFileAfterSend(true);
+                // If no Imagick, return PDF instead - COMMENTED OUT deleteFileAfterSend TO KEEP TMP FILES
+                return response()->download($tempPdfPath, str_replace('.jpg', '.pdf', $filename));
             }
 
         } catch (\Exception $e) {
@@ -1207,6 +1254,10 @@ class RecipientController extends Controller
      */
     public function newStudentGenerateBulkJpg(Request $request)
     {
+        // Increase memory limit and execution time for bulk processing
+        ini_set('memory_limit', '1024M');
+        set_time_limit(600); // 10 minutes
+        
         // Validate the uploaded Excel file
         $request->validate([
             'excel_file' => 'required|file|mimes:xlsx,xls'
@@ -1234,8 +1285,8 @@ class RecipientController extends Controller
             // Clean up temporary files
             $this->cleanupTempFiles($jpgFiles, $tempDir);
 
-            // Return ZIP file for download
-            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+            // Return ZIP file for download - COMMENTED OUT deleteFileAfterSend TO KEEP TMP FILES
+            return response()->download($zipFilePath);
         } catch (\Exception $e) {
             $this->cleanupTempFiles([], $tempDir);
             Log::error('Error in newStudentGenerateBulkJpg', ['error' => $e->getMessage()]);
